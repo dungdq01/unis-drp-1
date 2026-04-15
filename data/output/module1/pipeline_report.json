@@ -1,0 +1,16 @@
+{
+  "pipeline": "step1_demand",
+  "run_at": "2026-04-13T11:31:53.871537",
+  "stats": {
+    "agg_input": 1660,
+    "agg_filtered": 241,
+    "agg_output": 5676,
+    "drp_input": 84764,
+    "drp_filtered": 5076,
+    "drp_mapped": 78792,
+    "drp_errors": 896,
+    "snapshot_lines": 78792,
+    "summary_lines": 5676
+  },
+  "total_errors": 896
+}

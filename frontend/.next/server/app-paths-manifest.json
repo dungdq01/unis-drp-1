@@ -1,0 +1,11 @@
+{
+  "/demand/page": "app/demand/page.js",
+  "/guide/page": "app/guide/page.js",
+  "/supply/page": "app/supply/page.js",
+  "/page": "app/page.js",
+  "/policy/page": "app/policy/page.js",
+  "/drp/page": "app/drp/page.js",
+  "/allocation/page": "app/allocation/page.js",
+  "/transport/page": "app/transport/page.js",
+  "/monitor/page": "app/monitor/page.js"
+}

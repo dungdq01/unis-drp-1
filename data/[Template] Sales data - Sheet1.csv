@@ -1,0 +1,5 @@
+Mã giao dịch,Số hợp đồng,Thời gian,Mô tả,Mã chi nhánh,Mã phần mềm,Loại,Đơn vị tính,Số lượng,Tổng tiền
+transaction_id,doc_no,doc_date,transaction_descrb,branch_code,bravo_sku,transaction_type,transaction_uom,transaction_quantity,revenue
+b0551a9d-b339-400a-8ab6-aa1192a824d7,079.HD05/0064,5/6/2024,CNLĐ XUẤT BÁN HÀNG KH BẢO LONG,079,09.L1.6060.CA02GP6601.1,Bán lẻ,M2,149.76,20067840
+effe82c3-f499-4d7f-9a04-aa11ee078fa3,001.HD01/0105,1/12/2024,CNĐN Xuất bán Gạch CH Việt Hương - Giao 1109 tôn đản 0362084575,001,29.L1.3060.FC3606.08,GS ôm kho/Duyệt giá,M2,43.92,4172400
+244277f8-2d34-4363-85aa-aa12311f883f,069.HD02/0022,2/7/2023,CN Vĩnh Long UM xuất hàng CH Đại Lợi,069,10.L1.3060.7801.8,Bán lẻ,M2,10.08,1596672

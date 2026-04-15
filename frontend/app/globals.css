@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    --sky-1: #e0f2fe;
+    --sky-2: #bae6fd;
+    --accent: #0ea5e9;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    /* Warm cream shimmer: many large soft amber spots scattered, no hard edges.
+       Multiple radial-gradients blend into a lấp lánh / sparkle field. */
+    background-color: #fffdf4;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(253, 224, 71, 0.18) 0%, transparent 28%),
+      radial-gradient(circle at 78% 22%, rgba(250, 204, 21, 0.14) 0%, transparent 32%),
+      radial-gradient(circle at 22% 62%, rgba(254, 240, 138, 0.22) 0%, transparent 30%),
+      radial-gradient(circle at 88% 70%, rgba(253, 224, 71, 0.16) 0%, transparent 34%),
+      radial-gradient(circle at 50% 95%, rgba(250, 204, 21, 0.12) 0%, transparent 40%),
+      radial-gradient(circle at 38% 40%, rgba(255, 255, 255, 0.55) 0%, transparent 25%),
+      radial-gradient(circle at 65% 50%, rgba(255, 255, 255, 0.5) 0%, transparent 28%),
+      linear-gradient(180deg, #fffbe8 0%, #fefce8 50%, #fffdf4 100%);
+    background-attachment: fixed;
+    background-size: cover;
+    color: #080f1e;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    min-height: 100vh;
+  }
+
+  /* Sidebar theming handled via .glass-sidebar component class below */
+
+  /* Elegant scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #94a3b8, #cbd5e1);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+}
+
+@layer components {
+  /* ── Frosted Glass Card (warm amber theme) ── */
+  .glass-card {
+    background: rgba(255, 253, 244, 0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(253, 224, 71, 0.28);
+    border-radius: var(--radius);
+    box-shadow:
+      0 1px 3px rgba(161, 98, 7, 0.06),
+      0 4px 12px rgba(161, 98, 7, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    background: rgba(255, 253, 244, 0.95);
+    border-color: rgba(245, 158, 11, 0.4);
+    box-shadow:
+      0 4px 16px rgba(245, 158, 11, 0.1),
+      0 8px 32px rgba(161, 98, 7, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    transform: translateY(-1px);
+  }
+
+  /* ── Decorated data table (amber zebra + cream header) ── */
+  .glass-card table thead tr {
+    background: linear-gradient(180deg, #fef9c3 0%, #fef3c7 100%);
+    border-bottom: 2px solid rgba(234, 179, 8, 0.3) !important;
+  }
+  .glass-card table thead th {
+    color: #431407 !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.06em;
+  }
+  .glass-card table tbody tr {
+    transition: background 0.15s ease;
+  }
+  .glass-card table tbody tr:nth-child(odd) {
+    background: rgba(254, 249, 195, 0.35);
+  }
+  .glass-card table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.5);
+  }
+  .glass-card table tbody tr:hover {
+    background: rgba(253, 230, 138, 0.55) !important;
+  }
+
+  /* Sticky header matches thead tint */
+  .glass-card table thead.sticky {
+    background: linear-gradient(180deg, #fef9c3 0%, #fef3c7 100%) !important;
+  }
+
+  /* ── Navy Sidebar ── */
+  .glass-sidebar {
+    background:
+      radial-gradient(circle at 30% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+      radial-gradient(circle at 70% 55%, rgba(37, 99, 235, 0.08) 0%, transparent 45%),
+      linear-gradient(180deg, #0f1c36 0%, #0d1930 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-right: 1px solid rgba(59, 130, 246, 0.15);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+  }
+
+  /* ── Navy Top Bar ── */
+  .glass-topbar {
+    background: linear-gradient(180deg, #0f1c36 0%, #0d1930 100%);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+    box-shadow: 0 1px 0 rgba(59, 130, 246, 0.08), 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* ── KPI Card (warm amber theme) ── */
+  .kpi-card {
+    background: linear-gradient(135deg, rgba(255, 253, 244, 0.9) 0%, rgba(254, 249, 195, 0.7) 100%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(234, 179, 8, 0.2);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(161,98,7,0.06), 0 4px 12px rgba(161,98,7,0.04), inset 0 1px 0 rgba(255,255,255,0.9);
+    position: relative;
+    overflow: hidden;
+    padding: 1rem 1.25rem;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .kpi-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 80px;
+    height: 80px;
+    background: radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 70%);
+    pointer-events: none;
+  }
+  .kpi-card:hover {
+    background: linear-gradient(135deg, rgba(255, 253, 244, 1) 0%, rgba(254, 243, 199, 0.9) 100%);
+    border-color: rgba(245, 158, 11, 0.35);
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1), inset 0 1px 0 rgba(255,255,255,0.95);
+  }
+
+  /* ── Step Module Card ── */
+  .module-card {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(148, 173, 215, 0.2);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.02), inset 0 1px 0 rgba(255,255,255,0.7);
+    padding: 1.25rem;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .module-card:hover {
+    border-color: rgba(14, 165, 233, 0.3);
+  }
+
+  /* ── Active nav item ── */
+  .nav-active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(59, 130, 246, 0.05));
+    border: 1px solid rgba(14, 165, 233, 0.15);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  /* ── Badge styles ── */
+  .badge-sky {
+    background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+    color: #0369a1;
+    border: 1px solid rgba(14, 165, 233, 0.2);
+  }
+  .badge-emerald {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+  .badge-amber {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+    color: #92400e;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+  }
+  .badge-red {
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+    color: #991b1b;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  /* ── Pipeline step indicator ── */
+  .step-done {
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  .step-active {
+    background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+    box-shadow: 0 0 12px rgba(14, 165, 233, 0.3);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .step-pending {
+    background: rgba(148, 173, 215, 0.15);
+    border: 1.5px solid rgba(148, 173, 215, 0.3);
+  }
+}
+
+@layer utilities {
+  /* Status semantic tokens */
+  .status-success  { color: #10b981; }
+  .status-warning  { color: #f59e0b; }
+  .status-error    { color: #ef4444; }
+  .status-info     { color: #0ea5e9; }
+  .status-blocked  { color: #94a3b8; }
+
+  /* Gradient text */
+  .text-gradient-sky {
+    background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-accent {
+    background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Section header */
+  .section-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+
+  /* Number display */
+  .metric-value {
+    font-family: "Inter", monospace;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #080f1e;
+  }
+
+  /* Dot separator */
+  .dot-separator::before {
+    content: "·";
+    margin: 0 0.5rem;
+    color: #cbd5e1;
+  }
+
+  /* Contrast boost: darken common slate text classes for readability on pale bg */
+  .text-slate-400 { color: #64748b !important; }
+  .text-slate-500 { color: #475569 !important; }
+  .text-slate-600 { color: #334155 !important; }
+  .text-slate-700 { color: #1e293b !important; }
+  .text-slate-800 { color: #0f172a !important; }
+  .text-slate-900 { color: #080f1e !important; }
+}

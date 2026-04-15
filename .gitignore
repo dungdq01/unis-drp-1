@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# Build and dist
+dist/
+build/
+out/
+target/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+*.log

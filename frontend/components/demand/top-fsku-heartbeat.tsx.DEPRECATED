@@ -1,0 +1,136 @@
+'use client';
+
+import { useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { COLORS } from '@/lib/chart-colors';
+import { ChartCard } from '@/components/shared/chart-card';
+import type { PivotRow } from '@/lib/api/demand';
+
+const fmt = (n: number | null | undefined) => {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return Math.round(n).toLocaleString();
+};
+
+// Distinct colors for up to 6 lines (trading-chart palette)
+const LINE_COLORS = [
+  COLORS.primary,    // blue
+  COLORS.secondary,  // emerald
+  COLORS.warning,    // amber
+  COLORS.accent,     // violet
+  '#EC4899',         // pink
+  '#06B6D4',         // cyan
+];
+
+interface Props {
+  pivotData: PivotRow[];
+  topN?: number;
+}
+
+/**
+ * "Xung nhịp" top FSKUs — trading-chart style multi-line view.
+ * Each line = 1 FSKU, X = period, Y = forecast qty. Quick pulse check for planner.
+ */
+export function TopFskuHeartbeat({ pivotData, topN = 5 }: Props) {
+  const { chartData, topItems, periods } = useMemo(() => {
+    if (!pivotData || pivotData.length === 0) {
+      return { chartData: [], topItems: [], periods: [] };
+    }
+    // Top N by total
+    const top = [...pivotData].sort((a, b) => b.total - a.total).slice(0, topN);
+    // Collect all periods from top items, sort ascending
+    const periodSet = new Set<string>();
+    for (const it of top) for (const p of Object.keys(it.periods)) periodSet.add(p);
+    const sortedPeriods = Array.from(periodSet).sort();
+
+    // Build chartData = one row per period with one column per fsku
+    const rows = sortedPeriods.map(p => {
+      const row: Record<string, any> = { period: p };
+      for (const it of top) {
+        row[it.itemCode] = it.periods[p] ?? 0;
+      }
+      return row;
+    });
+    return { chartData: rows, topItems: top, periods: sortedPeriods };
+  }, [pivotData, topN]);
+
+  if (chartData.length === 0) {
+    return (
+      <ChartCard title="Xung nhịp Top FSKU" subtitle="Đang chờ data…" height={300}>
+        <div className="h-full flex items-center justify-center text-sm text-slate-400">No data</div>
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      title={`Xung nhịp Top ${topN} FSKU`}
+      subtitle={`Forecast qty qua ${periods.length} kỳ · Like trading pulse — tìm mã đang bứt phá / sụt giảm`}
+      height={340}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 h-full">
+        <div className="lg:col-span-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} vertical={false} />
+              <XAxis dataKey="period" fontSize={11} stroke={COLORS.axis} />
+              <YAxis tickFormatter={fmt} fontSize={11} stroke={COLORS.axis} width={48} />
+              <Tooltip
+                formatter={(v: any, name: any) => [fmt(Number(v)), String(name)]}
+                contentStyle={{ fontSize: 11, borderRadius: 6, maxWidth: 260 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="line" />
+              {topItems.map((it, i) => (
+                <Line
+                  key={it.itemCode}
+                  type="monotone"
+                  dataKey={it.itemCode}
+                  name={it.itemCode}
+                  stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                  isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Side: top items leaderboard with trend indicator */}
+        <div className="space-y-1 overflow-y-auto max-h-[340px]">
+          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Leaderboard</p>
+          {topItems.map((it, i) => {
+            const vals = periods.map(p => it.periods[p] ?? 0);
+            const first = vals[0] ?? 0;
+            const last = vals[vals.length - 1] ?? 0;
+            const delta = first > 0 ? ((last - first) / first) * 100 : 0;
+            const trendIcon = delta > 5 ? '🟢' : delta < -5 ? '🔴' : '⚪';
+            return (
+              <div
+                key={it.itemCode}
+                className="flex items-center gap-2 text-[11px] py-1 border-b border-slate-100/70"
+              >
+                <span className="w-4 text-center font-mono text-slate-400">{i + 1}</span>
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: LINE_COLORS[i % LINE_COLORS.length] }}
+                />
+                <span className="flex-1 truncate font-mono text-slate-700" title={it.itemCode}>
+                  {it.itemCode.split('.').pop()}
+                </span>
+                <span className="font-mono text-slate-600">{fmt(it.total)}</span>
+                <span className="w-10 text-right text-[10px]">
+                  {trendIcon} <span className={delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-rose-600' : 'text-slate-400'}>
+                    {delta > 0 ? '+' : ''}{delta.toFixed(0)}%
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </ChartCard>
+  );
+}
