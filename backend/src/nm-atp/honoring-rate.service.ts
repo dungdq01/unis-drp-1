@@ -173,6 +173,74 @@ export class HonoringRateService implements OnApplicationBootstrap {
     return { nmCount: nmRows.length, unreliableCount };
   }
 
+  /**
+   * M28 Step 6 entry point (M1 CTO sweep — mode coordination).
+   *   mode='monthly_full'   : M26 monthly cron — create/upsert row + full compute for period_month.
+   *   mode='weekly_rolling' : M28 weekly — only UPDATE rolling_3m_rate for last 3 months (KHÔNG create row).
+   * Race-safe: both modes share single method, mode parameter selects behavior branch.
+   */
+  async recompute(
+    month: string,
+    mode: 'monthly_full' | 'weekly_rolling',
+  ): Promise<{ nmCount: number; unreliableCount: number }> {
+    if (mode === 'monthly_full') {
+      return this.computeMonthly(month);
+    }
+
+    // weekly_rolling: update rolling_3m_rate for last 3 months for all NMs
+    const monthsToRefresh: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(month);
+      d.setUTCMonth(d.getUTCMonth() - i);
+      monthsToRefresh.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`);
+    }
+
+    let unreliableCount = 0;
+    const nmRows: Array<{ nm_id: string }> = await this.dataSource.query(
+      `SELECT DISTINCT nm_id::text FROM nm_honoring_rate`,
+    );
+
+    for (const { nm_id } of nmRows) {
+      for (const periodMonth of monthsToRefresh) {
+        const rolling3mRows: Array<{ r3m: number | null }> = await this.dataSource.query(
+          `SELECT AVG(rate)::float AS r3m
+           FROM nm_honoring_rate
+           WHERE nm_id = $1
+             AND period_month >= ($2::date - INTERVAL '2 months')
+             AND period_month <= $2::date
+             AND rate IS NOT NULL`,
+          [nm_id, periodMonth],
+        );
+        const rolling3mRate = rolling3mRows[0]?.r3m ?? null;
+        if (rolling3mRate === null) continue;
+
+        await this.dataSource.query(
+          `UPDATE nm_honoring_rate
+             SET rolling_3m_rate = $3, calculated_at = NOW()
+           WHERE nm_id = $1 AND period_month = $2`,
+          [nm_id, periodMonth, rolling3mRate],
+        );
+
+        // R8/H3 badge check on latest month
+        if (periodMonth === monthsToRefresh[0]) {
+          if (rolling3mRate < 0.80) {
+            await this.dataSource.query(
+              `UPDATE supplier SET nm_unreliable_badge = TRUE WHERE id = $1`, [nm_id],
+            );
+            this.logger.warn(`[recompute-weekly] NM #${nm_id} rolling_3m=${(rolling3mRate * 100).toFixed(1)}% < 80% → badge=TRUE`);
+            unreliableCount++;
+          } else {
+            await this.dataSource.query(
+              `UPDATE supplier SET nm_unreliable_badge = FALSE WHERE id = $1`, [nm_id],
+            );
+          }
+        }
+      }
+    }
+
+    return { nmCount: nmRows.length, unreliableCount };
+  }
+
   private async _checkPhase2DataAvailable(periodMonth: string): Promise<boolean> {
     // Phase 2 check: po_line.actual_received_qty column exists and has data for period
     try {

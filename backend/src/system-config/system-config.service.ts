@@ -308,6 +308,16 @@ export class SystemConfigService {
     };
   }
 
+  // ── Get single config value ───────────────────────────────────────────────
+
+  async getValue(key: string): Promise<string | null> {
+    const rows = await this.dataSource.query<{ config_value: string }[]>(
+      `SELECT config_value FROM system_config WHERE config_key = $1 LIMIT 1`,
+      [key],
+    );
+    return rows[0]?.config_value ?? null;
+  }
+
   // ── Feature flag: isEnabled (TTL 30s cache) ───────────────────────────────
 
   async isEnabled(flagKey: string): Promise<boolean> {

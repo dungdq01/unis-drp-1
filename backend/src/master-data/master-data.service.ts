@@ -1315,4 +1315,97 @@ export class MasterDataService {
 
     return paginate(data, total, page, pageSize);
   }
+
+  // ─── M28 EXTEND: programmatic LT auto-update (R11 separation of concerns) ────
+
+  /**
+   * M28 calls this after computing rolling 6-month avg LT.
+   * Applies drift gate (>30% → block, drift_count++; ≥3 consecutive → force apply).
+   * Returns action taken + new drift_count for lt_actual_log audit.
+   */
+  async autoUpdateLt(
+    supplierCode: string,
+    newLtDays: number,
+    actor: string,
+  ): Promise<{ action: 'APPLIED' | 'DRIFT_BLOCKED' | 'DRIFT_FORCE_APPLY'; driftCountAfter: number }> {
+    return this.dataSource.transaction(async (em) => {
+      const supplier = await em.findOne(Supplier, { where: { supplierCode } });
+      if (!supplier) {
+        return { action: 'DRIFT_BLOCKED' as const, driftCountAfter: 0 };
+      }
+
+      const oldLt     = supplier.leadTimeDays ?? newLtDays;
+      const driftPct  = oldLt > 0 ? Math.abs(newLtDays - oldLt) / oldLt * 100 : 0;
+      const driftCount = supplier.ltDriftCount ?? 0;
+      const isForce   = driftCount >= 2 && driftPct > 30;
+      const shouldApply = driftPct <= 30 || isForce;
+
+      const action: 'APPLIED' | 'DRIFT_BLOCKED' | 'DRIFT_FORCE_APPLY' = shouldApply
+        ? (isForce ? 'DRIFT_FORCE_APPLY' : 'APPLIED')
+        : 'DRIFT_BLOCKED';
+
+      if (shouldApply) {
+        supplier.leadTimeDays   = Math.round(newLtDays * 10) / 10;
+        supplier.ltDriftCount   = 0; // reset on successful apply
+        supplier.ltDriftLastAt  = new Date();
+      } else {
+        supplier.ltDriftCount   = driftCount + 1;
+        supplier.ltDriftLastAt  = new Date();
+      }
+      await em.save(Supplier, supplier);
+
+      await this._audit(em, {
+        entityType: 'SUPPLIER',
+        entityId:   supplierCode,
+        action:     'UPDATE',
+        changedFields: { leadTimeDays: [oldLt, shouldApply ? newLtDays : oldLt], actor, action, driftPct },
+        changedBy:  actor,
+      });
+
+      return { action, driftCountAfter: supplier.ltDriftCount };
+    });
+  }
+
+  /**
+   * M28 calls this to update transport_lane.lt_days for a NM→CN route.
+   * H2 fix: full drift_count tracking + DRIFT_FORCE_APPLY (same pattern as autoUpdateLt).
+   */
+  async updateTransitLt(
+    nmCode: string,
+    cnCode: string,
+    newLtDays: number,
+    actor: string,
+  ): Promise<{ action: 'APPLIED' | 'DRIFT_BLOCKED' | 'DRIFT_FORCE_APPLY'; driftCountAfter: number }> {
+    const lane: Array<{ id: string; lt_days: number | null; lt_drift_count: number }> =
+      await this.dataSource.query(
+        `SELECT id::text, lt_days::float, COALESCE(lt_drift_count, 0)::int AS lt_drift_count
+         FROM transport_lane
+         WHERE source_location_code = $1 AND dest_location_code = $2 AND is_active = TRUE
+         LIMIT 1`,
+        [nmCode, cnCode],
+      );
+    if (lane.length === 0) return { action: 'DRIFT_BLOCKED', driftCountAfter: 0 };
+
+    const { id, lt_drift_count: driftCount } = lane[0];
+    const oldLt    = lane[0].lt_days ?? newLtDays;
+    const driftPct = oldLt > 0 ? Math.abs(newLtDays - oldLt) / oldLt * 100 : 0;
+    const isForce  = driftCount >= 2 && driftPct > 30;
+    const shouldApply = driftPct <= 30 || isForce;
+
+    const action: 'APPLIED' | 'DRIFT_BLOCKED' | 'DRIFT_FORCE_APPLY' = shouldApply
+      ? (isForce ? 'DRIFT_FORCE_APPLY' : 'APPLIED')
+      : 'DRIFT_BLOCKED';
+
+    const newCount = shouldApply ? 0 : driftCount + 1;
+    await this.dataSource.query(
+      `UPDATE transport_lane
+         SET lt_days = CASE WHEN $1 THEN $2 ELSE lt_days END,
+             lt_drift_count = $3,
+             lt_drift_last_at = NOW()
+       WHERE id = $4`,
+      [shouldApply, Math.round(newLtDays * 10) / 10, newCount, id],
+    );
+
+    return { action, driftCountAfter: newCount };
+  }
 }

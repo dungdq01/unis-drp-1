@@ -1,8 +1,7 @@
 {
-  "/master-data/page": "app/master-data/page.js",
-  "/system-config/page": "app/system-config/page.js",
   "/supply/page": "app/supply/page.js",
-  "/demand/page": "app/demand/page.js",
-  "/transport/page": "app/transport/page.js",
-  "/nm-atp/page": "app/nm-atp/page.js"
+  "/nm-atp/page": "app/nm-atp/page.js",
+  "/guide/page": "app/guide/page.js",
+  "/system-config/page": "app/system-config/page.js",
+  "/page": "app/page.js"
 }

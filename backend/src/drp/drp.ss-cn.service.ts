@@ -290,6 +290,25 @@ export class DrpSsCnService {
     };
   }
 
+  /**
+   * M28 contract (H1+H2 CTO v1.2) — PURE formula, KHÔNG ghi DB, KHÔNG side effect.
+   * M28 Step 3 gọi để compute ss_new với σ_demand mới mà không trigger any DB write.
+   */
+  computeSsCnFormula(input: {
+    sigmaDemand: number;
+    ltHubDays: number;
+    zUsed: number;
+    lcnbReductionPct: number;
+    meanDemand?: number;
+    minSsFloorPct?: number;
+  }): number {
+    const { sigmaDemand, ltHubDays, zUsed, lcnbReductionPct, meanDemand = 0, minSsFloorPct = 0.05 } = input;
+    const ssBase     = zUsed * sigmaDemand * Math.sqrt(ltHubDays);
+    const ssAfterLcnb = ssBase * (1 - lcnbReductionPct / 100);
+    const ssFloor    = meanDemand * minSsFloorPct;
+    return Math.max(0, ssAfterLcnb, ssFloor);
+  }
+
   private async _bulkInsertChunk(planRunId: string, rows: SsCnRow[]): Promise<void> {
     const values: unknown[] = [];
     const placeholders: string[] = [];

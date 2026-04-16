@@ -38,6 +38,6 @@ import { SystemConfigModule } from '../system-config/system-config.module';
     DrpVariantSuggestionService,
     DrpNettingV2Service,
   ],
-  exports: [DrpService, DrpNettingV2Service],
+  exports: [DrpService, DrpNettingV2Service, DrpSsCnService], // M28 injects preview() for SS formula
 })
 export class DrpModule {}

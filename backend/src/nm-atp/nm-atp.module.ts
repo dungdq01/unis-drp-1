@@ -5,6 +5,7 @@ import { AtpCheck } from './entities/atp-check.entity';
 import { NmHonoringRate } from './entities/nm-honoring-rate.entity';
 import { NmAtpService } from './nm-atp.service';
 import { NmAtpController } from './nm-atp.controller';
+import { HonoringRateService } from './honoring-rate.service';
 import { AtpClassificationService } from './atp-classification.service';
 import { UrgencyRankingService } from './urgency-ranking.service';
 import { HonoringRateService } from './honoring-rate.service';
@@ -28,6 +29,6 @@ import { PoReviewModule } from '../po-review/po-review.module';
     HonoringRateService,
   ],
   controllers: [NmAtpController],
-  exports: [NmAtpService], // M27 injects NmAtpService.getAtpResult()
+  exports: [NmAtpService, HonoringRateService], // M27 injects getAtpResult(); M28 injects recompute()
 })
 export class NmAtpModule {}
