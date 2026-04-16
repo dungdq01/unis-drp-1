@@ -10,21 +10,25 @@ type StepStatus = "completed" | "active" | "pending";
 
 type PipelineStep = {
   step: number;
+  domain: string;
   name: string;
   subtext: string;
   href: string;
   status: StepStatus;
+  flow: "Cross" | "Flow 1" | "Flow 2";
 };
 
 const STEPS: PipelineStep[] = [
-  { step: 1, name: "Demand",    subtext: "Synced",    href: "/demand",      status: "completed" },
-  { step: 2, name: "Supply",    subtext: "4-bucket",  href: "/supply",      status: "completed" },
-  { step: 3, name: "Inventory", subtext: "SS+ABC",    href: "/policy",      status: "completed" },
-  { step: 4, name: "DRP",       subtext: "4,218",     href: "/drp",         status: "completed" },
-  { step: 5, name: "Alloc",     subtext: "3 exc",     href: "/allocation",  status: "active"    },
-  { step: 6, name: "Transport", subtext: "—",         href: "/transport",   status: "pending"   },
-  { step: 7, name: "Execution", subtext: "12 draft",  href: "/execution",   status: "pending"   },
-  { step: 8, name: "Monitor",   subtext: "—",         href: "/monitor",     status: "pending"   },
+  { step: 1,  domain: "D1",  name: "Foundation",   subtext: "Master data",  href: "/master-data", status: "completed", flow: "Cross"  },
+  { step: 2,  domain: "D2",  name: "Demand",        subtext: "Synced",       href: "/demand",      status: "completed", flow: "Flow 2" },
+  { step: 3,  domain: "D3",  name: "Supply",        subtext: "4-bucket",     href: "/supply",      status: "completed", flow: "Flow 2" },
+  { step: 4,  domain: "D4",  name: "Replenishment", subtext: "SS+Netting",   href: "/drp",         status: "completed", flow: "Flow 2" },
+  { step: 5,  domain: "D5",  name: "Allocation",    subtext: "3 exc",        href: "/allocation",  status: "active",    flow: "Flow 2" },
+  { step: 6,  domain: "D6",  name: "Transport",     subtext: "—",            href: "/transport",   status: "pending",   flow: "Flow 2" },
+  { step: 7,  domain: "D7",  name: "Order Mgmt",    subtext: "12 draft",     href: "/execution",   status: "pending",   flow: "Flow 2" },
+  { step: 8,  domain: "D8",  name: "S&OP",          subtext: "Booking",      href: "/commitment",  status: "pending",   flow: "Flow 1" },
+  { step: 9,  domain: "D9",  name: "Monitor",       subtext: "—",            href: "/monitor",     status: "pending",   flow: "Cross"  },
+  { step: 10, domain: "D10", name: "Intelligence",  subtext: "—",            href: "/intelligence",status: "pending",   flow: "Cross"  },
 ];
 
 const completedCount = STEPS.filter((s) => s.status === "completed").length;
@@ -41,9 +45,30 @@ export function PipelineBar() {
         {STEPS.map((step, idx) => {
           const isCurrentPage =
             step.href === "/" ? pathname === "/" : pathname.startsWith(step.href);
+          const prevFlow = idx > 0 ? STEPS[idx - 1].flow : null;
+          const flowChanged = prevFlow !== null && prevFlow !== step.flow;
+          const FLOW_LABEL: Record<PipelineStep["flow"], string> = {
+            "Cross":  "Cross",
+            "Flow 2": "F2",
+            "Flow 1": "F1",
+          };
+          const FLOW_COLOR: Record<PipelineStep["flow"], string> = {
+            "Cross":  "text-slate-500 border-slate-600",
+            "Flow 2": "text-blue-400 border-blue-700",
+            "Flow 1": "text-amber-400 border-amber-700",
+          };
 
           return (
             <React.Fragment key={step.step}>
+              {flowChanged && (
+                <div className="flex-shrink-0 flex flex-col items-center justify-center mx-1 gap-0.5">
+                  <div className="h-6 w-px bg-slate-700" />
+                  <span className={cn("text-[8px] font-bold border rounded px-0.5 leading-tight", FLOW_COLOR[step.flow])}>
+                    {FLOW_LABEL[step.flow]}
+                  </span>
+                  <div className="h-6 w-px bg-slate-700" />
+                </div>
+              )}
               <Link href={step.href} className="flex-shrink-0">
                 <div
                   className={cn(
@@ -77,6 +102,9 @@ export function PipelineBar() {
 
                   {/* Step info */}
                   <div>
+                    <p className="text-[9px] font-mono leading-none mb-0.5 text-slate-600">
+                      {step.domain}
+                    </p>
                     <p
                       className={cn(
                         "text-[12px] font-semibold leading-none",

@@ -63,6 +63,24 @@ export class SupplySnapshot {
   @Column({ name: 'created_by', nullable: true })
   createdBy: string;
 
+  // ── M21 Data Sync fields ─────────────────────────────────────────────────
+
+  /** NM supplier code — references supplier.supplier_code (VARCHAR PK until Sprint 2). */
+  @Column({ name: 'nm_code', type: 'varchar', length: 30, nullable: true, default: null })
+  nmCode: string | null;
+
+  /** Timestamp of last confirmed NM upload. Gate checks this vs threshold. */
+  @Column({ name: 'synced_at', type: 'timestamp', nullable: true, default: null })
+  syncedAt: Date | null;
+
+  /** Data origin. LEGACY = pre-M21 rows (skip gate during grace period). */
+  @Column({ name: 'source', type: 'varchar', length: 20, default: 'LEGACY' })
+  source: 'NM_UPLOAD' | 'MANUAL' | 'ESTIMATED' | 'FALLBACK' | 'LEGACY';
+
+  /** Grace period flag. TRUE = skip freshness gate. DevOps flips FALSE after 3 days. */
+  @Column({ name: 'is_legacy_data', type: 'boolean', default: false })
+  isLegacyData: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

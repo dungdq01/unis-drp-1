@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, Body, Headers } from '@nestjs/common';
 import { SystemConfigService } from './system-config.service';
 import { ListConfigQueryDto, UpdateConfigsDto, UpdateToggleDto, AuditQueryDto } from './dto';
 
@@ -30,6 +30,22 @@ export class SystemConfigController {
   @Get('audit')
   getAudit(@Query() q: AuditQueryDto) {
     return this.svc.getAuditLog(q);
+  }
+
+  // GET /api/v1/system-config/flags
+  @Get('flags')
+  listFlags() {
+    return this.svc.listFlags();
+  }
+
+  // PATCH /api/v1/system-config/flags/:flagKey
+  @Patch('flags/:flagKey')
+  updateFlag(
+    @Param('flagKey') flagKey: string,
+    @Body() body: { enabled: boolean },
+    @Headers('x-user-id') userId = 'admin',
+  ) {
+    return this.svc.updateFlag(flagKey, body.enabled, userId);
   }
 
   // GET /api/v1/system-config/:group

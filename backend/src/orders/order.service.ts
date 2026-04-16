@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { OrderBatch } from './entities/order-batch.entity';
 import { OrderLine } from './entities/order-line.entity';
 import { UNIS_ORDER_CONFIG } from './order.config';
@@ -34,12 +34,30 @@ export class OrderService {
     private readonly dataSource: DataSource,
   ) {}
 
+  // [BUG-03] M7_TRANSACTION_SAFE (default: true)
+  // Set M7_TRANSACTION_SAFE=false in .env to disable transaction wrap (emergency rollback only).
+  // Rollback = set false + redeploy ~2 min. See SPRINT-0-BUG-FIX.md §4.
+  private get txSafeMode(): boolean {
+    return process.env.M7_TRANSACTION_SAFE !== 'false';
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // BATCH: CREATE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async createBatch(dto: CreateOrderBatchDto): Promise<OrderBatch> {
-    // 1. Validate transport_plan tồn tại và đã CONFIRMED
+  async createBatch(dto: CreateOrderBatchDto, idempotencyKey?: string): Promise<OrderBatch> {
+    // [BUG-03] Idempotency check — short-circuit nếu key đã tồn tại và chưa expire
+    if (idempotencyKey) {
+      const cached = await this._checkIdempotency(idempotencyKey, 'POST /orders/batches');
+      if (cached) return cached;
+    }
+
+    // [BUG-03] Env flag guard
+    if (!this.txSafeMode) {
+      console.warn('[BUG-03] Transaction mode DISABLED via M7_TRANSACTION_SAFE=false — skipping tx wrap');
+    }
+
+    // 1. Validate transport_plan tồn tại và đã CONFIRMED (pre-check, outside tx)
     const planRows: { status: string }[] = await this.dataSource.query(
       `SELECT status FROM transport_plan WHERE id = $1::bigint`,
       [dto.transportPlanId],
@@ -49,7 +67,7 @@ export class OrderService {
     if (planRows[0].status !== 'CONFIRMED')
       throw new ConflictException(`transport_plan status=${planRows[0].status}. Chỉ CONFIRMED plan mới tạo được order batch.`);
 
-    // 2. Duplicate check
+    // 2. Duplicate check (pre-check, outside tx — idempotency guard inside tx handles race)
     const existing = await this.batchRepo.findOne({ where: { transportPlanId: dto.transportPlanId } });
     if (existing)
       throw new ConflictException(`Order batch đã tồn tại cho plan này (batch_id=${existing.id}, code=${existing.batchCode})`);
@@ -59,58 +77,82 @@ export class OrderService {
     if (tripLines.length === 0)
       throw new BadRequestException('Không có trip lines nào để tạo order. Kiểm tra transport_trip status=PLANNED.');
 
-    // 4. Generate batch_code (atomic sequence, no race condition)
-    const batchCode = await this._nextBatchCode();
+    // 4-7. Wrap ALL writes in a single transaction — BUG-03 fix.
+    // If any step fails (e.g. chunk insert on line 500), the entire tx rolls back:
+    // no orphan batch header, no partial lines, no consumed batch_code.
+    let createdBatchId: string;
 
-    // 5. Create batch header
-    const batch = await this.batchRepo.save(
-      this.batchRepo.create({
+    await this.dataSource.transaction(async (em: EntityManager) => {
+      // 4. Generate batch_code inside tx — table-based seq rolls back with tx on failure
+      const seqResult: { last_seq: number }[] = await em.query(`
+        INSERT INTO order_batch_seq (month_key, last_seq)
+        VALUES ($1, 1)
+        ON CONFLICT (month_key) DO UPDATE
+          SET last_seq = order_batch_seq.last_seq + 1
+        RETURNING last_seq
+      `, [new Date().toISOString().slice(0, 7).replace('-', '')]);
+
+      const seq = String(seqResult[0].last_seq).padStart(4, '0');
+      const monthKey = new Date().toISOString().slice(0, 7).replace('-', '');
+      const batchCode = `${UNIS_ORDER_CONFIG.batchCodePrefix}-${monthKey}-${seq}`;
+
+      // 5. Create batch header
+      const batchEntity = em.create(OrderBatch, {
         transportPlanId: dto.transportPlanId,
         batchCode,
         status: 'DRAFT',
         createdBy: dto.createdBy ?? null,
         note: dto.note ?? null,
-      }),
-    );
+      });
+      const batch = await em.save(OrderBatch, batchEntity);
+      createdBatchId = batch.id;
 
-    // 6. Bulk insert order lines
-    const lines = tripLines.map((tl, idx) => {
-      const seq = String(idx + 1).padStart(UNIS_ORDER_CONFIG.lineSeqPad, '0');
-      return this.lineRepo.create({
-        orderBatchId: batch.id,
-        orderNo: `${batchCode}-L${seq}`,
-        orderType: 'TO',
-        sourceLocationCode: tl.sourceLocationCode,
-        destLocationCode: tl.destLocationCode,
-        itemCode: tl.itemCode,
-        itemName: tl.itemName,
-        baseUom: tl.baseUom ?? 'M2',
-        qty: tl.qty,
-        unitPriceVnd: 0,
-        totalValueVnd: 0, // Phase 1: price = 0
-        departureDate: tl.departureDate,
-        etaDate: tl.etaDate,
-        carrierCode: tl.carrierCode,
-        transportTripId: tl.tripId,
-        allocationResultId: tl.allocationResultId,
-        status: 'ACTIVE',
+      // 6. Bulk insert order lines in chunks
+      const CHUNK = UNIS_ORDER_CONFIG.insertChunkSize;
+      for (let i = 0; i < tripLines.length; i += CHUNK) {
+        const chunk = tripLines.slice(i, i + CHUNK).map((tl, offset) => {
+          const lineIdx = i + offset;
+          const lineSeq = String(lineIdx + 1).padStart(UNIS_ORDER_CONFIG.lineSeqPad, '0');
+          return em.create(OrderLine, {
+            orderBatchId: batch.id,
+            orderNo: `${batchCode}-L${lineSeq}`,
+            orderType: 'TO',
+            sourceLocationCode: tl.sourceLocationCode,
+            destLocationCode: tl.destLocationCode,
+            itemCode: tl.itemCode,
+            itemName: tl.itemName,
+            baseUom: tl.baseUom ?? 'M2',
+            qty: tl.qty,
+            unitPriceVnd: 0,
+            totalValueVnd: 0, // Phase 1: price = 0
+            departureDate: tl.departureDate,
+            etaDate: tl.etaDate,
+            carrierCode: tl.carrierCode,
+            transportTripId: tl.tripId,
+            allocationResultId: tl.allocationResultId,
+            status: 'ACTIVE',
+          });
+        });
+        await em.save(OrderLine, chunk);
+      }
+
+      // 7. Update batch totals (still inside tx)
+      const totalQty = tripLines.reduce((s, l) => s + Number(l.qty), 0);
+      await em.update(OrderBatch, batch.id, {
+        totalLines: tripLines.length,
+        totalQty: Math.round(totalQty * 100) / 100,
+        totalValueVnd: 0,
       });
     });
 
-    const CHUNK = UNIS_ORDER_CONFIG.insertChunkSize;
-    for (let i = 0; i < lines.length; i += CHUNK) {
-      await this.lineRepo.save(lines.slice(i, i + CHUNK));
+    const result = await this.batchRepo.findOne({ where: { id: createdBatchId! } }) as OrderBatch;
+
+    // [BUG-03] Persist idempotency record so duplicate requests return same result
+    if (idempotencyKey) {
+      await this._saveIdempotency(idempotencyKey, 'POST /orders/batches', result);
     }
 
-    // 7. Update batch totals
-    const totalQty = tripLines.reduce((s, l) => s + Number(l.qty), 0);
-    await this.batchRepo.update(batch.id, {
-      totalLines: lines.length,
-      totalQty: Math.round(totalQty * 100) / 100,
-      totalValueVnd: 0,
-    });
-
-    return this.batchRepo.findOne({ where: { id: batch.id } }) as Promise<OrderBatch>;
+    return result;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -327,25 +369,6 @@ export class OrderService {
   }
 
   /**
-   * Atomic batch_code generation: TO-YYYYMM-XXXX
-   * ON CONFLICT upsert ensures no race condition under concurrent requests.
-   */
-  private async _nextBatchCode(): Promise<string> {
-    const monthKey = new Date().toISOString().slice(0, 7).replace('-', ''); // '202604'
-
-    const result: { last_seq: number }[] = await this.dataSource.query(`
-      INSERT INTO order_batch_seq (month_key, last_seq)
-      VALUES ($1, 1)
-      ON CONFLICT (month_key) DO UPDATE
-        SET last_seq = order_batch_seq.last_seq + 1
-      RETURNING last_seq
-    `, [monthKey]);
-
-    const seq = String(result[0].last_seq).padStart(4, '0');
-    return `${UNIS_ORDER_CONFIG.batchCodePrefix}-${monthKey}-${seq}`;
-  }
-
-  /**
    * Load all trip lines từ transport_plan.
    * Chỉ lấy trips có status=PLANNED — bỏ qua NO_CARRIER trips.
    */
@@ -372,6 +395,28 @@ export class OrderService {
         AND tt.status = 'PLANNED'
       ORDER BY tt.source_location_code, tt.dest_location_code, ttl.item_code
     `, [transportPlanId]);
+  }
+
+  // ─── Idempotency helpers (BUG-03) ────────────────────────────────────────────
+  // Table: idempotency_log(key PK, endpoint, result_json, status_code, expires_at)
+  // DA tạo bảng — xem migration M7_idempotency_log.sql
+
+  private async _checkIdempotency(key: string, endpoint: string): Promise<OrderBatch | null> {
+    const rows: { result_json: any }[] = await this.dataSource.query(
+      `SELECT result_json FROM idempotency_log WHERE key = $1 AND expires_at > NOW()`,
+      [key],
+    );
+    if (rows.length > 0) return rows[0].result_json as OrderBatch;
+    return null;
+  }
+
+  private async _saveIdempotency(key: string, endpoint: string, result: OrderBatch): Promise<void> {
+    await this.dataSource.query(
+      `INSERT INTO idempotency_log (key, endpoint, result_json, status_code)
+       VALUES ($1, $2, $3, 201)
+       ON CONFLICT (key) DO NOTHING`,
+      [key, endpoint, JSON.stringify(result)],
+    );
   }
 
   private async _recalcBatchValue(batchId: string): Promise<void> {

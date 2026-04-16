@@ -52,6 +52,18 @@ export class SupplySnapshotLine {
   @Column({ name: 'override_at', type: 'timestamp', nullable: true })
   overrideAt: Date;
 
+  /** M25 H2: line-level reservation for in-transit transport trips. Added in V006. */
+  @Column({ name: 'reserved_for_transport', type: 'decimal', precision: 15, scale: 2, default: 0 })
+  reservedForTransport: number;
+
+  /**
+   * M26 §11b prerequisite (C2/H4 CTO fix): Available-To-Promise qty uploaded by NM via M21 template.
+   * NULL when NM has not uploaded with ATP column → M26 falls back to allocatable_qty + is_atp_null_fallback flag.
+   * Added in V007 migration.
+   */
+  @Column({ name: 'atp_qty', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  atpQty: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

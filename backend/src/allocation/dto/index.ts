@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsIn, IsNumber, IsArray, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsIn, IsNumber, IsArray, IsBoolean, Min } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateAllocationRunDto {
   @IsString()
@@ -48,6 +48,12 @@ export class GetResultsQueryDto {
   @IsOptional()
   @IsIn(['A', 'B', 'C'])
   abcClass?: 'A' | 'B' | 'C';
+
+  /** ?includelegs=true — attach legs[] array to each result row */
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeLegs?: boolean;
 }
 
 export class GetRecommendationsQueryDto {

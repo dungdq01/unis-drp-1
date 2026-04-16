@@ -55,6 +55,7 @@ export class SupplyService {
       quarantine_qty: string;
       in_transit_qty: string;
       oldest_sync_at: Date | null;
+      is_estimated: boolean; // BUG-01 fix: true when any lot in group has source_type='DISTRIBUTION'
     }[] = await this.dataSource.query(
       `SELECT
          item_code,
@@ -63,7 +64,8 @@ export class SupplyService {
          SUM(reserved_qty)::numeric(15,2)                                   AS reserved_qty,
          SUM(quarantine_qty)::numeric(15,2)                                 AS quarantine_qty,
          ${includeInTransit ? 'SUM(in_transit_qty)' : '0'}::numeric(15,2)  AS in_transit_qty,
-         MIN(last_sync_at)                                                  AS oldest_sync_at
+         MIN(last_sync_at)                                                  AS oldest_sync_at,
+         BOOL_OR(source_type = 'DISTRIBUTION')                             AS is_estimated
        FROM lot_attribute
        WHERE quality_status = 'ALLOCATABLE'
          ${hasLocationFilter ? 'AND location_code = ANY($1)' : ''}
@@ -99,7 +101,7 @@ export class SupplyService {
         inTransitQty: parseFloat(row.in_transit_qty),
         oldestSyncAt,
         freshness,
-        isEstimated: false,
+        isEstimated: row.is_estimated ?? false, // BUG-01 fix: propagate from source_type
       };
     });
 
@@ -111,6 +113,7 @@ export class SupplyService {
     const totalReservedQty = linesData.reduce((s, l) => s + l.reservedQty, 0);
     const totalInTransitQty = linesData.reduce((s, l) => s + l.inTransitQty, 0);
     const staleLines = linesData.filter((l) => l.freshness === 'STALE').length;
+    const estimatedLines = linesData.filter((l) => l.isEstimated).length; // BUG-01 fix
     const snapshotFreshness: 'PASS' | 'STALE' = staleLines > 0 ? 'STALE' : 'PASS';
 
     // Oldest sync for snapshot-level age
@@ -138,7 +141,7 @@ export class SupplyService {
         totalAllocatableQty,
         totalReservedQty,
         totalInTransitQty,
-        estimatedLinesCount: 0,
+        estimatedLinesCount: estimatedLines,
         staleAcknowledged: false,
         captureAt: now,
         createdBy: createdBy ?? undefined,

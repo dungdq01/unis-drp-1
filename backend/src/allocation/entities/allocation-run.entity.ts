@@ -9,7 +9,32 @@ export class AllocationRun {
   planRunId: string;
 
   @Column({ type: 'varchar', length: 20, default: 'RUNNING' })
-  status: 'RUNNING' | 'QUEUED' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
+  status: 'RUNNING' | 'QUEUED' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'BLOCKED_M23_NOT_READY';
+
+  // ── M24 extensions ───────────────────────────────────────────────────────
+
+  /** Rule 14: reuses M23 plan_run's policy_run_id — no new snapshot. */
+  @Column({ name: 'policy_run_id', type: 'bigint', nullable: true, default: null })
+  policyRunId: string | null;
+
+  /** Snapshot of lcnb.enabled from policy_run at run time. */
+  @Column({ name: 'lcnb_enabled', type: 'boolean', default: false })
+  lcnbEnabled: boolean;
+
+  @Column({ name: 'total_legs_count', type: 'int', default: 0 })
+  totalLegsCount: number;
+
+  @Column({ name: 'lcnb_transfers_count', type: 'int', default: 0 })
+  lcnbTransfersCount: number;
+
+  @Column({ name: 'partial_stockout_count', type: 'int', default: 0 })
+  partialStockoutCount: number;
+
+  @Column({ name: 'is_force_rerun', type: 'boolean', default: false })
+  isForceRerun: boolean;
+
+  @Column({ name: 'force_rerun_reason', type: 'text', nullable: true, default: null })
+  forceRerunReason: string | null;
 
   @Column({ name: 'total_demand_lines', type: 'int', default: 0 })
   totalDemandLines: number;

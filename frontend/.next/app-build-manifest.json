@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/master-data/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/master-data/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,55 +11,55 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/demand/page": [
+    "/system-config/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/demand/page.js"
+      "static/chunks/app/system-config/page.js"
     ],
     "/supply/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/supply/page.js"
     ],
-    "/policy/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/policy/page.js"
+      "static/chunks/app/page.js"
     ],
-    "/drp/page": [
+    "/demand/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/drp/page.js"
-    ],
-    "/config/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/config/page.js"
-    ],
-    "/allocation/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/allocation/page.js"
-    ],
-    "/monitor/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/monitor/page.js"
+      "static/chunks/app/demand/page.js"
     ],
     "/guide/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/guide/page.js"
     ],
+    "/drp/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/drp/page.js"
+    ],
+    "/allocation/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/allocation/page.js"
+    ],
+    "/policy/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/policy/page.js"
+    ],
     "/transport/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/transport/page.js"
     ],
-    "/execution/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/execution/page.js"
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }

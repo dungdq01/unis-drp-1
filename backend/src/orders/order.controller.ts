@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Res, HttpCode, HttpStatus,
+  Param, Body, Query, Res, Headers, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -25,8 +25,11 @@ export class OrderController {
 
   @Post('batches')
   @ApiOperation({ summary: 'Generate order batch từ transport_plan_id (CONFIRMED)' })
-  createBatch(@Body() dto: CreateOrderBatchDto) {
-    return this.svc.createBatch(dto);
+  createBatch(
+    @Body() dto: CreateOrderBatchDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.svc.createBatch(dto, idempotencyKey);
   }
 
   @Get('batches')

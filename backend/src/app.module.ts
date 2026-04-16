@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MasterDataModule } from './master-data/master-data.module';
 import { DemandModule } from './demand/demand.module';
 import { SupplyModule } from './supply/supply.module';
 import { PolicyModule } from './policy/policy.module';
@@ -10,6 +11,9 @@ import { OrderModule } from './orders/order.module';
 import { MonitorModule } from './monitor/monitor.module';
 import { PlanActualModule } from './plan-actual/plan-actual.module';
 import { SystemConfigModule } from './system-config/system-config.module';
+import { DataSyncModule } from './data-sync/data-sync.module';
+import { CnAdjustModule } from './cn-adjust/cn-adjust.module';
+import { NmAtpModule } from './nm-atp/nm-atp.module';
 
 @Module({
   imports: [
@@ -23,6 +27,7 @@ import { SystemConfigModule } from './system-config/system-config.module';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: false,
     }),
+    MasterDataModule,
     DemandModule,
     SupplyModule,
     PolicyModule,
@@ -33,6 +38,9 @@ import { SystemConfigModule } from './system-config/system-config.module';
     MonitorModule,
     PlanActualModule,
     SystemConfigModule,
+    DataSyncModule,
+    CnAdjustModule,
+    NmAtpModule,
   ],
 })
 export class AppModule {}

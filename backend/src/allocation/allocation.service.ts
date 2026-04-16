@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { AllocationRun } from './entities/allocation-run.entity';
 import { AllocationResult } from './entities/allocation-result.entity';
+import { AllocationLeg } from './entities/allocation-leg.entity';
 import { AllocationRecommendation } from './entities/allocation-recommendation.entity';
 import { UNIS_ALLOCATION_CONFIG } from './allocation-config';
 import {
@@ -27,10 +28,17 @@ interface RtmRule {
   priority: number;
 }
 
+interface DecisionLeg {
+  sourceType: string;         // 'HUB' | 'NM' | 'CN_REDIST'
+  sourceLocationCode: string; // giữ để map source_entity_id sau, Phase 1 = 0
+  qty: number;
+  priority: number;
+}
+
 interface Decision {
   porId: string;
   itemCode: string;
-  sourceLocationCode: string;
+  sourceLocationCode: string; // primary (first) source
   destLocationCode: string;
   qtyRequired: number;
   qtyAllocated: number;
@@ -38,6 +46,7 @@ interface Decision {
   sourcePriority: number;
   weekNumber: number;
   layerTrace: Record<string, unknown>;
+  legs: DecisionLeg[]; // BUG-02: per-source breakdown
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +58,8 @@ export class AllocationService {
     private readonly runRepo: Repository<AllocationRun>,
     @InjectRepository(AllocationResult)
     private readonly resultRepo: Repository<AllocationResult>,
+    @InjectRepository(AllocationLeg)
+    private readonly legRepo: Repository<AllocationLeg>,
     @InjectRepository(AllocationRecommendation)
     private readonly recRepo: Repository<AllocationRecommendation>,
     private readonly dataSource: DataSource,
@@ -192,6 +203,8 @@ export class AllocationService {
     trace['L4_abc'] = `class=${demand.abcClass} mode=FCFS`;
 
     // Waterfall: accumulate across RTM priorities + L5 SS Guard
+    const legs: DecisionLeg[] = []; // BUG-02: track per-source breakdown
+
     for (const rule of rules) {
       if (remaining <= 0) break;
 
@@ -228,6 +241,10 @@ export class AllocationService {
 
       trace[`P${rule.priority}_${rule.sourceLocationCode}`] = `take=${take} ss=${ss} rem=${remaining}`;
 
+      // BUG-02: record leg for this source
+      // Phase 1: tất cả đều là HUB vì allocation từ warehouse → branch
+      legs.push({ sourceType: 'HUB', sourceLocationCode: rule.sourceLocationCode, qty: take, priority: rule.priority });
+
       if (!primarySource) {
         primarySource = rule.sourceLocationCode;
         primaryPriority = rule.priority;
@@ -249,6 +266,7 @@ export class AllocationService {
       sourcePriority: primaryPriority,
       weekNumber: demand.weekNumber,
       layerTrace: trace,
+      legs,
     };
   }
 
@@ -259,6 +277,7 @@ export class AllocationService {
       qtyRequired: demand.qtyRequired, qtyAllocated: 0,
       abcClass: demand.abcClass, sourcePriority: 0,
       weekNumber: demand.weekNumber, layerTrace,
+      legs: [], // UNALLOCATED — no legs
     };
   }
 
@@ -417,12 +436,69 @@ export class AllocationService {
         );
       }
 
-      await this.dataSource.query(
+      // BUG-02: RETURNING id so we can insert allocation_leg rows
+      const inserted: { id: string }[] = await this.dataSource.query(
         `INSERT INTO allocation_result
            (allocation_run_id, planned_order_id, item_code,
             source_location_code, dest_location_code, lot_number,
             qty_required, qty_allocated, fill_rate,
             abc_class, source_priority, status, layer_trace, week_number)
+         VALUES ${ph.join(', ')}
+         RETURNING id`,
+        params,
+      );
+
+      // Insert legs for each result that has multi-source breakdown
+      const legRows: { resultId: string; leg: DecisionLeg }[] = [];
+      for (let j = 0; j < chunk.length; j++) {
+        const resultId = inserted[j].id;
+        for (const leg of chunk[j].legs) {
+          legRows.push({ resultId, leg });
+        }
+      }
+
+      if (legRows.length > 0) {
+        await this._bulkInsertLegs(legRows);
+      }
+
+      // BE1-3b: recompute qty_allocated = SUM(legs) để đảm bảo tính nhất quán
+      const resultIds = inserted.map((r) => r.id);
+      if (resultIds.length > 0) {
+        await this.dataSource.query(
+          `UPDATE allocation_result ar
+           SET qty_allocated = (
+             SELECT COALESCE(SUM(al.allocated_qty), 0)
+             FROM allocation_leg al
+             WHERE al.allocation_result_id = ar.id
+           )
+           WHERE ar.id = ANY($1::bigint[])`,
+          [resultIds],
+        );
+      }
+    }
+  }
+
+  private async _bulkInsertLegs(
+    rows: { resultId: string; leg: DecisionLeg }[],
+  ): Promise<void> {
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const ph = chunk.map((_, j) => {
+        const b = j * 6 + 1;
+        return `($${b},$${b+1},$${b+2},$${b+3},$${b+4},$${b+5})`;
+      });
+      const params = chunk.flatMap(({ resultId, leg }) => [
+        resultId,          // $1 allocation_result_id
+        leg.sourceType,    // $2 source_type  ('HUB' | 'NM' | 'CN_REDIST')
+        0,                 // $3 source_entity_id — Phase 1: always 0
+        leg.qty,           // $4 allocated_qty
+        null,              // $5 fifo_rank — Phase 1: NULL
+        null,              // $6 distance_km — Phase 1: NULL
+      ]);
+      await this.dataSource.query(
+        `INSERT INTO allocation_leg
+           (allocation_result_id, source_type, source_entity_id, allocated_qty, fifo_rank, distance_km)
          VALUES ${ph.join(', ')}`,
         params,
       );
@@ -504,7 +580,29 @@ export class AllocationService {
 
     qb.skip((page - 1) * pageSize).take(pageSize);
     const [data, total] = await qb.getManyAndCount();
-    return { data, meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
+    const meta = { page, pageSize, total, totalPages: Math.ceil(total / pageSize) };
+
+    // ?includelegs=true — join legs per result row
+    if (query.includeLegs) {
+      const resultIds = data.map((r) => r.id);
+      const legs: any[] = resultIds.length > 0
+        ? await this.dataSource.query(
+            `SELECT * FROM allocation_leg WHERE allocation_result_id = ANY($1::bigint[])`,
+            [resultIds],
+          )
+        : [];
+
+      const legMap = new Map<string, any[]>();
+      for (const leg of legs) {
+        const list = legMap.get(leg.allocation_result_id) ?? [];
+        list.push(leg);
+        legMap.set(leg.allocation_result_id, list);
+      }
+
+      return { data: data.map((r) => ({ ...r, legs: legMap.get(r.id) ?? [] })), meta };
+    }
+
+    return { data, meta };
   }
 
   async getSummary(id: string) {

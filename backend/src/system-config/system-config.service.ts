@@ -1,46 +1,116 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { SystemConfig } from './entities/system-config.entity';
 import { ConfigAuditLog } from './entities/config-audit-log.entity';
 import { UpdateConfigsDto, UpdateToggleDto, AuditQueryDto } from './dto';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const pct = (key: string) => (v: string) => {
+  const n = Number(v);
+  if (isNaN(n) || n < 0 || n > 100) throw new BadRequestException(`${key} phải trong [0, 100]`);
+};
+const intRange = (key: string, min: number, max: number) => (v: string) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max)
+    throw new BadRequestException(`${key} phải là số nguyên trong [${min}, ${max}]`);
+};
+const numRange = (key: string, min: number, max: number) => (v: string) => {
+  const n = Number(v);
+  if (isNaN(n) || n < min || n > max)
+    throw new BadRequestException(`${key} phải trong [${min}, ${max}]`);
+};
+
 // ── Validation bounds ─────────────────────────────────────────────────────────
 
 const BOUNDS: Record<string, (v: string) => void> = {
-  'plugin.csl_class_a': (v) => {
-    const n = Number(v);
-    if (isNaN(n) || n <= 0 || n > 1) throw new BadRequestException('CSL phải trong khoảng (0, 1]');
-  },
-  'plugin.csl_class_b': (v) => {
-    const n = Number(v);
-    if (isNaN(n) || n <= 0 || n > 1) throw new BadRequestException('CSL phải trong khoảng (0, 1]');
-  },
-  'plugin.csl_class_c': (v) => {
-    const n = Number(v);
-    if (isNaN(n) || n <= 0 || n > 1) throw new BadRequestException('CSL phải trong khoảng (0, 1]');
-  },
-  'plugin.lcnb_factor': (v) => {
-    const n = Number(v);
-    if (isNaN(n) || n < 0 || n > 1) throw new BadRequestException('lcnb_factor phải trong [0, 1]');
-  },
-  'plugin.horizon_weeks': (v) => {
-    const n = Number(v);
-    if (!Number.isInteger(n) || n < 1 || n > 52) throw new BadRequestException('horizon_weeks phải trong [1, 52]');
-  },
-  'plugin.po_overdue_days': (v) => {
-    const n = Number(v);
-    if (!Number.isInteger(n) || n < 1 || n > 365) throw new BadRequestException('po_overdue_days phải trong [1, 365]');
-  },
-  'planning.max_stale_minutes': (v) => {
-    const n = Number(v);
-    if (!Number.isInteger(n) || n < 1 || n > 1440) throw new BadRequestException('max_stale_minutes phải trong [1, 1440]');
-  },
+  // ── Phase 1 (existing) ────────────────────────────────────────────────────
+  'plugin.csl_class_a': numRange('csl_class_a', 0, 1),
+  'plugin.csl_class_b': numRange('csl_class_b', 0, 1),
+  'plugin.csl_class_c': numRange('csl_class_c', 0, 1),
+  'plugin.lcnb_factor': numRange('lcnb_factor', 0, 1),
+  'plugin.horizon_weeks': intRange('horizon_weeks', 1, 52),
+  'plugin.po_overdue_days': intRange('po_overdue_days', 1, 365),
   'feature.lcnb.enabled': (v) => {
     const raw = v.replace(/^"|"$/g, '');
-    if (!['OFF', 'DETECT_ONLY', 'EXECUTE'].includes(raw)) {
+    if (!['OFF', 'DETECT_ONLY', 'EXECUTE'].includes(raw))
       throw new BadRequestException('lcnb mode không hợp lệ — phải là OFF | DETECT_ONLY | EXECUTE');
+  },
+
+  // ── M10 PLANNING ──────────────────────────────────────────────────────────
+  'planning.max_stale_minutes': intRange('planning.max_stale_minutes', 1, 1440),
+  'planning.force_override_allowed': (v) => {
+    if (!['true', 'false'].includes(v)) throw new BadRequestException('force_override_allowed phải là true hoặc false');
+  },
+
+  // ── M10 LCNB ─────────────────────────────────────────────────────────────
+  'lcnb.enabled': (v) => {
+    const raw = v.replace(/^"|"$/g, '');
+    if (!['OFF', 'DETECT_ONLY', 'EXECUTE'].includes(raw))
+      throw new BadRequestException('lcnb.enabled phải là OFF | DETECT_ONLY | EXECUTE');
+  },
+  'lcnb.max_distance_km':      numRange('lcnb.max_distance_km', 50, 2000),
+  'lcnb.min_excess_threshold': numRange('lcnb.min_excess_threshold', 1, 10000),
+  'lcnb.max_transfer_pct':     pct('lcnb.max_transfer_pct'),
+  'lcnb.ss_reduction_pct':     pct('lcnb.ss_reduction_pct'),
+  'lcnb.fifo_enabled': (v) => {
+    if (!['true', 'false'].includes(v)) throw new BadRequestException('lcnb.fifo_enabled phải là true hoặc false');
+  },
+
+  // ── M10 TRUST SCORE ───────────────────────────────────────────────────────
+  'trust.window_weeks':                 intRange('trust.window_weeks', 1, 52),
+  'trust.accuracy_threshold_pct':       pct('trust.accuracy_threshold_pct'),
+  'trust.auto_approve_threshold_pct':   pct('trust.auto_approve_threshold_pct'),
+  'trust.reduce_tolerance_threshold_pct': pct('trust.reduce_tolerance_threshold_pct'),
+
+  // ── M10 CN ADJUSTMENT ─────────────────────────────────────────────────────
+  'cn_adjust.tolerance_pct': pct('cn_adjust.tolerance_pct'),
+  'cn_adjust.cutoff_time': (v) => {
+    const raw = v.replace(/^"|"$/g, '');
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw))
+      throw new BadRequestException('cn_adjust.cutoff_time phải đúng định dạng HH:MM (24h)');
+  },
+  'cn_adjust.reason_codes': (v) => {
+    try {
+      const arr = JSON.parse(v);
+      if (!Array.isArray(arr) || arr.some((x) => typeof x !== 'string'))
+        throw new Error();
+    } catch {
+      throw new BadRequestException('cn_adjust.reason_codes phải là JSON array of strings');
     }
+  },
+
+  // ── M10 TRANSPORT ─────────────────────────────────────────────────────────
+  'transport.min_fill_ratio':  numRange('transport.min_fill_ratio', 0, 1),
+  'transport.hold_max_days':   intRange('transport.hold_max_days', 0, 14),
+  'transport.hold_buffer_days': intRange('transport.hold_buffer_days', 0, 7),
+
+  // ── M10 FC COMMITMENT (với cross-field — handled in service) ──────────────
+  'commit.hard_tolerance_pct':   pct('commit.hard_tolerance_pct'),
+  'commit.firm_tolerance_pct':   pct('commit.firm_tolerance_pct'),
+  'commit.soft_tolerance_pct':   pct('commit.soft_tolerance_pct'),
+  'commit.gap_alert_day':        intRange('commit.gap_alert_day', 1, 28),
+  'commit.gap_alert_pct':        pct('commit.gap_alert_pct'),
+  'commit.gap_escalate_day':     intRange('commit.gap_escalate_day', 1, 31),
+  'commit.gap_escalate_pct':     pct('commit.gap_escalate_pct'),
+
+  // ── M10 B2B PIPELINE ──────────────────────────────────────────────────────
+  'b2b.stage_prob': (v) => {
+    let obj: Record<string, number>;
+    try { obj = JSON.parse(v); } catch {
+      throw new BadRequestException('b2b.stage_prob phải là JSON object');
+    }
+    const required = ['Lead', 'Qualified', 'Proposal', 'Committed', 'Confirmed', 'Lost'];
+    for (const k of required) {
+      if (!(k in obj)) throw new BadRequestException(`b2b.stage_prob thiếu key: ${k}`);
+      const n = Number(obj[k]);
+      if (isNaN(n) || n < 0 || n > 100)
+        throw new BadRequestException(`b2b.stage_prob.${k} phải trong [0, 100]`);
+    }
+    if (obj['Confirmed'] !== 100) throw new BadRequestException('b2b.stage_prob.Confirmed phải = 100');
+    if (obj['Lost'] !== 0) throw new BadRequestException('b2b.stage_prob.Lost phải = 0');
   },
 };
 
@@ -75,13 +145,21 @@ const STATIC_ROLES = [
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+interface FlagCacheEntry { enabled: boolean; expiresAt: number }
+const FLAG_TTL_MS = 30_000;
+
 @Injectable()
 export class SystemConfigService {
+  /** Instance-level cache — each service instance has its own (test-isolation safe). */
+  private readonly flagCache = new Map<string, FlagCacheEntry>();
+
   constructor(
     @InjectRepository(SystemConfig)
     private readonly configRepo: Repository<SystemConfig>,
     @InjectRepository(ConfigAuditLog)
     private readonly auditRepo: Repository<ConfigAuditLog>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   // ── GET all ───────────────────────────────────────────────────────────────
@@ -114,7 +192,7 @@ export class SystemConfigService {
       const boundsCheck = BOUNDS[item.key];
       if (boundsCheck) boundsCheck(item.value);
 
-      // Cross-key validation: stockout must be < overstock
+      // ── Cross-field: stockout < overstock ────────────────────────────────
       if (item.key === 'plugin.hstk_stockout_threshold') {
         const overstockVal = updateMap.get('plugin.hstk_overstock_threshold')
           ?? (await this._loadValue('PLUGIN_PARAMS', 'plugin.hstk_overstock_threshold'));
@@ -128,6 +206,25 @@ export class SystemConfigService {
         if (stockoutVal && Number(item.value) <= Number(stockoutVal)) {
           throw new BadRequestException('overstock_threshold phải > stockout_threshold');
         }
+      }
+
+      // ── Cross-field M10: commit.hard < firm < soft ────────────────────────
+      const getCommit = async (key: string) =>
+        Number(updateMap.get(key) ?? (await this._loadValue('FC_COMMIT', key)) ?? '0');
+
+      if (['commit.hard_tolerance_pct', 'commit.firm_tolerance_pct', 'commit.soft_tolerance_pct'].includes(item.key)) {
+        const hard = await getCommit('commit.hard_tolerance_pct');
+        const firm = await getCommit('commit.firm_tolerance_pct');
+        const soft = await getCommit('commit.soft_tolerance_pct');
+        if (hard >= firm) throw new BadRequestException('commit.hard_tolerance_pct phải < firm_tolerance_pct');
+        if (firm >= soft) throw new BadRequestException('commit.firm_tolerance_pct phải < soft_tolerance_pct');
+      }
+
+      // ── Cross-field M10: gap_alert_day < gap_escalate_day ────────────────
+      if (['commit.gap_alert_day', 'commit.gap_escalate_day'].includes(item.key)) {
+        const alertDay = Number(updateMap.get('commit.gap_alert_day') ?? (await this._loadValue('FC_COMMIT', 'commit.gap_alert_day')) ?? '0');
+        const escalateDay = Number(updateMap.get('commit.gap_escalate_day') ?? (await this._loadValue('FC_COMMIT', 'commit.gap_escalate_day')) ?? '0');
+        if (alertDay >= escalateDay) throw new BadRequestException('commit.gap_alert_day phải < gap_escalate_day');
       }
     }
 
@@ -209,6 +306,62 @@ export class SystemConfigService {
       note: 'Static Phase 1 — not configurable via UI',
       roles: STATIC_ROLES,
     };
+  }
+
+  // ── Feature flag: isEnabled (TTL 30s cache) ───────────────────────────────
+
+  async isEnabled(flagKey: string): Promise<boolean> {
+    const cached = this.flagCache.get(flagKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.enabled;
+
+    const row = await this.dataSource.query<{ enabled: boolean }[]>(
+      `SELECT enabled FROM feature_flag WHERE flag_name = $1 LIMIT 1`,
+      [flagKey],
+    );
+    const enabled = row.length > 0 ? row[0].enabled : (process.env[`FF_${flagKey.toUpperCase()}`] === 'true');
+    this.flagCache.set(flagKey, { enabled, expiresAt: Date.now() + FLAG_TTL_MS });
+    return enabled;
+  }
+
+  // ── Feature flag: listFlags ───────────────────────────────────────────────
+
+  async listFlags(): Promise<{ flagName: string; enabled: boolean; description: string; updatedAt: Date }[]> {
+    const rows = await this.dataSource.query<{ flag_name: string; enabled: boolean; description: string; updated_at: Date }[]>(
+      `SELECT flag_name, enabled, description, updated_at FROM feature_flag ORDER BY flag_name ASC`,
+    );
+    return rows.map(r => ({
+      flagName:    r.flag_name,
+      enabled:     r.enabled,
+      description: r.description,
+      updatedAt:   r.updated_at,
+    }));
+  }
+
+  // ── Feature flag: updateFlag ──────────────────────────────────────────────
+
+  async updateFlag(flagKey: string, enabled: boolean, updatedBy: string): Promise<{ flagName: string; enabled: boolean }> {
+    const result = await this.dataSource.query<{ flag_name: string }[]>(
+      `UPDATE feature_flag SET enabled = $1, updated_at = NOW(), updated_by = $2
+       WHERE flag_name = $3 RETURNING flag_name`,
+      [enabled, updatedBy, flagKey],
+    );
+    if (result.length === 0) throw new NotFoundException(`Feature flag không tìm thấy: ${flagKey}`);
+
+    // Invalidate cache
+    this.flagCache.delete(flagKey);
+
+    // Audit entry in config_audit_log
+    const audit = this.auditRepo.create({
+      configGroup: 'FEATURE_FLAG',
+      configKey:   flagKey,
+      oldValue:    String(!enabled),
+      newValue:    String(enabled),
+      changedBy:   updatedBy,
+      reason:      `Feature flag toggled via API`,
+    });
+    await this.auditRepo.save(audit);
+
+    return { flagName: flagKey, enabled };
   }
 
   // ── GET audit log ─────────────────────────────────────────────────────────

@@ -20,6 +20,20 @@ export class TransportTripLine {
   @Column({ name: 'weight_kg', type: 'decimal', precision: 10, scale: 2, default: 0 })
   weightKg: number;
 
+  // ── M25 extensions (C3 line-to-stop mapping) ─────────────────────────────
+
+  /** FK transport_trip_stop — which stop unloads this line. NULL for single-drop. */
+  @Column({ name: 'stop_id', type: 'bigint', nullable: true, default: null })
+  stopId: string | null;
+
+  /** Trace to allocation source (lot, donor). */
+  @Column({ name: 'source_allocation_leg_id', type: 'bigint', nullable: true, default: null })
+  sourceAllocationLegId: string | null;
+
+  /** Top-up accept origin (spec §6b). */
+  @Column({ name: 'top_up_suggestion_id', type: 'bigint', nullable: true, default: null })
+  topUpSuggestionId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

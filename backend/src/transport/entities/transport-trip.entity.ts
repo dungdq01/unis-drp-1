@@ -39,10 +39,44 @@ export class TransportTrip {
   leadTimeDays: number;
 
   @Column({ type: 'varchar', length: 20, default: 'PLANNED' })
-  status: 'PLANNED' | 'NO_CARRIER' | 'DISPATCHED' | 'DELIVERED';
+  status: 'PLANNED' | 'HELD' | 'NO_CARRIER' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
 
   @Column({ name: 'exception_note', type: 'text', nullable: true, default: null })
   exceptionNote: string | null;
+
+  // ── M25 extensions ───────────────────────────────────────────────────────
+
+  /** MAX(pallets_pct, weight_pct) 0-1 — computed after consolidation (spec §4) */
+  @Column({ name: 'fill_ratio', type: 'decimal', precision: 5, scale: 4, nullable: true, default: null })
+  fillRatio: number | null;
+
+  /** Lifecycle reason distinct from status. SHIP | HOLD | FORCE_SHIP_LOW_FILL | FORCE_SHIP_TIMEOUT */
+  @Column({ name: 'hold_decision', type: 'varchar', length: 25, nullable: true, default: null })
+  holdDecision: 'SHIP' | 'HOLD' | 'FORCE_SHIP_LOW_FILL' | 'FORCE_SHIP_TIMEOUT' | null;
+
+  @Column({ name: 'hold_until_date', type: 'date', nullable: true, default: null })
+  holdUntilDate: string | null;
+
+  @Column({ name: 'hold_reason', type: 'text', nullable: true, default: null })
+  holdReason: string | null;
+
+  @Column({ name: 'held_at', type: 'timestamp', nullable: true, default: null })
+  heldAt: Date | null;
+
+  @Column({ name: 'is_multi_drop', type: 'boolean', default: false })
+  isMultiDrop: boolean;
+
+  @Column({ name: 'stop_count', type: 'int', default: 1 })
+  stopCount: number;
+
+  @Column({ name: 'policy_run_id', type: 'bigint', nullable: true, default: null })
+  policyRunId: string | null;
+
+  @Column({ name: 'allocation_run_id', type: 'bigint', nullable: true, default: null })
+  allocationRunId: string | null;
+
+  @Column({ name: 'cancel_reason', type: 'text', nullable: true, default: null })
+  cancelReason: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
