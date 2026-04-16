@@ -1,13 +1,17 @@
 import {
   Controller, Get, Post, Param, Body, Query, Headers,
-  HttpCode, HttpStatus, BadRequestException, ParseIntPipe,
+  HttpCode, HttpStatus, BadRequestException, ParseIntPipe, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { NmAtpService } from './nm-atp.service';
 import { HonoringRateService } from './honoring-rate.service';
+import { FeatureFlag } from '../master-data/feature-flag.decorator';
+import { FeatureFlagGuard } from '../master-data/master-data.controller';
 
 @ApiTags('nm-atp')
 @Controller('nm-atp')
+@UseGuards(FeatureFlagGuard)
+@FeatureFlag('m26_nm_atp_enabled')
 export class NmAtpController {
   constructor(
     private readonly svc: NmAtpService,

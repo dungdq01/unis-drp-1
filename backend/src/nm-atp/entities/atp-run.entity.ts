@@ -50,6 +50,6 @@ export class AtpRun {
   @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
   completedAt: Date | null;
 
-  @Column({ name: 'duration_ms', nullable: true })
+  @Column({ name: 'duration_ms', type: 'int', nullable: true })
   durationMs: number | null;
 }

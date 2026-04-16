@@ -552,6 +552,39 @@ video {
     border-radius: 10px;
   }
   ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.container {
+  width: 100%;
+}
+@media (min-width: 640px) {
+
+  .container {
+    max-width: 640px;
+  }
+}
+@media (min-width: 768px) {
+
+  .container {
+    max-width: 768px;
+  }
+}
+@media (min-width: 1024px) {
+
+  .container {
+    max-width: 1024px;
+  }
+}
+@media (min-width: 1280px) {
+
+  .container {
+    max-width: 1280px;
+  }
+}
+@media (min-width: 1536px) {
+
+  .container {
+    max-width: 1536px;
+  }
+}
 /* ── Frosted Glass Card (warm amber theme) ── */
 .glass-card {
     background: rgba(255, 253, 244, 0.85);
@@ -731,6 +764,12 @@ video {
 .col-span-full {
   grid-column: 1 / -1;
 }
+.col-span-4 {
+  grid-column: span 4 / span 4;
+}
+.col-span-8 {
+  grid-column: span 8 / span 8;
+}
 .-mx-1 {
   margin-left: -0.25rem;
   margin-right: -0.25rem;
@@ -835,6 +874,12 @@ video {
 }
 .mt-5 {
   margin-top: 1.25rem;
+}
+.mt-12 {
+  margin-top: 3rem;
+}
+.mt-8 {
+  margin-top: 2rem;
 }
 .block {
   display: block;
@@ -986,6 +1031,9 @@ video {
 .max-h-\[90vh\] {
   max-height: 90vh;
 }
+.max-h-\[380px\] {
+  max-height: 380px;
+}
 .min-h-0 {
   min-height: 0px;
 }
@@ -1124,6 +1172,12 @@ video {
 }
 .w-screen {
   width: 100vw;
+}
+.w-\[400px\] {
+  width: 400px;
+}
+.w-\[600px\] {
+  width: 600px;
 }
 .min-w-0 {
   min-width: 0px;
@@ -1396,6 +1450,16 @@ video {
   --tw-space-y-reverse: 0;
   margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
   margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
+}
+.space-x-0\.5 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 0;
+  margin-right: calc(0.125rem * var(--tw-space-x-reverse));
+  margin-left: calc(0.125rem * calc(1 - var(--tw-space-x-reverse)));
+}
+.space-x-2 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 0;
+  margin-right: calc(0.5rem * var(--tw-space-x-reverse));
+  margin-left: calc(0.5rem * calc(1 - var(--tw-space-x-reverse)));
 }
 .divide-y > :not([hidden]) ~ :not([hidden]) {
   --tw-divide-y-reverse: 0;
@@ -2241,6 +2305,18 @@ video {
 .bg-yellow-400 {
   --tw-bg-opacity: 1;
   background-color: rgb(250 204 21 / var(--tw-bg-opacity, 1));
+}
+.bg-amber-600 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(217 119 6 / var(--tw-bg-opacity, 1));
+}
+.bg-purple-100 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(243 232 255 / var(--tw-bg-opacity, 1));
+}
+.bg-purple-600 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(147 51 234 / var(--tw-bg-opacity, 1));
 }
 .bg-gradient-to-br {
   background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));

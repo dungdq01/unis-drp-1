@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
 import { TransportPlan } from './entities/transport-plan.entity';
@@ -16,6 +16,7 @@ import { TransportMultiDropService } from './transport.multi-drop.service';
 import { TransportTopUpService } from './transport.top-up.service';
 import { AllocationModule } from '../allocation/allocation.module';
 import { SystemConfigModule } from '../system-config/system-config.module';
+import { PoReviewModule } from '../po-review/po-review.module';
 
 @Module({
   imports: [
@@ -24,8 +25,9 @@ import { SystemConfigModule } from '../system-config/system-config.module';
       TopUpSuggestion, Carrier, TransportLane, VehicleType,
     ]),
     MulterModule.register({ limits: { fileSize: 50 * 1024 * 1024 } }),
-    AllocationModule,     // M25 injects AllocationLcnbService.getAllocationResult()
-    SystemConfigModule,   // FeatureFlagGuard dep
+    AllocationModule,                    // M25 injects AllocationLcnbService.getAllocationResult()
+    SystemConfigModule,                  // FeatureFlagGuard dep
+    forwardRef(() => PoReviewModule),    // H3 fix: AND correlation callback
   ],
   providers: [
     TransportService,

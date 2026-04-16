@@ -14,6 +14,7 @@ import { SystemConfigModule } from './system-config/system-config.module';
 import { DataSyncModule } from './data-sync/data-sync.module';
 import { CnAdjustModule } from './cn-adjust/cn-adjust.module';
 import { NmAtpModule } from './nm-atp/nm-atp.module';
+import { PoReviewModule } from './po-review/po-review.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { NmAtpModule } from './nm-atp/nm-atp.module';
     DataSyncModule,
     CnAdjustModule,
     NmAtpModule,
+    PoReviewModule,
   ],
 })
 export class AppModule {}

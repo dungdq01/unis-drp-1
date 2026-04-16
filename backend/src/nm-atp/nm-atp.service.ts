@@ -5,9 +5,13 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { PoReviewService } from '../po-review/po-review.service';
 import { AllocationLcnbService } from '../allocation/allocation.lcnb.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { FreshnessGateService, NmFreshnessResult } from '../data-sync/freshness-gate.service';
@@ -52,6 +56,7 @@ export class NmAtpService {
     private readonly classificationSvc: AtpClassificationService,
     private readonly urgencyRankingSvc: UrgencyRankingService,
     private readonly systemConfigSvc: SystemConfigService,
+    @Optional() @Inject(forwardRef(() => PoReviewService)) private readonly poReviewSvc?: PoReviewService,
   ) {}
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -205,6 +210,11 @@ export class NmAtpService {
       this.logger.log(
         `atp_run #${atpRunId} COMPLETED in ${durationMs}ms — ` +
           `${totalCells} cells: PASS=${passCount} PARTIAL=${partialCount} FAIL=${failCount} BLOCKED=${blockedCount} CRITICAL=${criticalCount}`,
+      );
+
+      // H3 fix: notify M27 AND correlation gate
+      this.poReviewSvc?.onM26AtpCompleted(opts.allocationRunId, atpRunId).catch(e =>
+        this.logger.error(`M27 onM26AtpCompleted callback failed: ${e?.message}`),
       );
 
       return {
@@ -443,8 +453,8 @@ export class NmAtpService {
          ssl.allocatable_qty::float
        FROM supplier s
        JOIN supply_snapshot ss ON ss.nm_code = s.supplier_code
-         AND ss.captured_at = (
-           SELECT MAX(captured_at) FROM supply_snapshot ss2
+         AND COALESCE(ss.synced_at, ss.captured_at) = (
+           SELECT MAX(COALESCE(ss2.synced_at, ss2.captured_at)) FROM supply_snapshot ss2
            WHERE ss2.nm_code = s.supplier_code AND ss2.status = 'FROZEN'
          )
        JOIN supply_snapshot_line ssl ON ssl.snapshot_id = ss.id

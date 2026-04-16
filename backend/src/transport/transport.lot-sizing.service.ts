@@ -7,9 +7,13 @@ import {
   ConflictException,
   NotFoundException,
   ServiceUnavailableException,
+  Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { PoReviewService } from '../po-review/po-review.service';
 import { AllocationLcnbService, AllocationResultDto } from '../allocation/allocation.lcnb.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import {
@@ -121,6 +125,7 @@ export class TransportLotSizingService implements OnModuleInit, OnApplicationBoo
     private readonly multiDropSvc: TransportMultiDropService,
     private readonly topUpSvc: TransportTopUpService,
     private readonly systemConfigSvc: SystemConfigService,
+    @Optional() @Inject(forwardRef(() => PoReviewService)) private readonly poReviewSvc?: PoReviewService,
   ) {}
 
   onModuleInit(): void {
@@ -234,6 +239,11 @@ export class TransportLotSizingService implements OnModuleInit, OnApplicationBoo
       this.logger.log(
         `transport_plan #${planId} ${finalStatus} in ${durationMs}ms — ` +
           `${persisted.trips.length} trips (${heldCount} held, ${multiDropCount} multi-drop, ${noCarrierCount} no_carrier)`,
+      );
+
+      // H3 fix: notify M27 AND correlation gate
+      this.poReviewSvc?.onM25TransportCompleted(opts.allocationRunId, planId).catch(e =>
+        this.logger.error(`M27 onM25TransportCompleted callback failed: ${e?.message}`),
       );
 
       return {

@@ -48,7 +48,7 @@ export class AtpCheck {
   result: 'PASS' | 'PARTIAL' | 'FAIL' | 'BLOCKED';
 
   /** Only set for BLOCKED (STALE_DATA) and FAIL (ZERO_STOCK). NOT for fallback warning. */
-  @Column({ length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   reason: string | null;
 
   /** H6 CTO fix: independent warning flag when atp_qty fallback to allocatable_qty. */
